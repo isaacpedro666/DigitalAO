@@ -703,6 +703,39 @@ const S = {
 };
 
 let unsubscribeSnapshot = null;
+// PAINEL DE DEBUG TEMPORÁRIO — mostra erros directamente no ecrã do telemóvel
+(function(){
+  const debugBox = document.createElement('div');
+  debugBox.id = 'debugBox';
+  debugBox.style.cssText = 'position:fixed;bottom:0;left:0;right:0;max-height:50vh;overflow-y:auto;background:#000;color:#0f0;font-family:monospace;font-size:11px;padding:10px;z-index:999999;border-top:3px solid red;display:none;white-space:pre-wrap;word-break:break-all;';
+  document.body.appendChild(debugBox);
+  function logToScreen(msg, isError){
+    debugBox.style.display = 'block';
+    const line = document.createElement('div');
+    line.style.color = isError ? '#ff5555' : '#0f0';
+    line.style.marginBottom = '4px';
+    line.textContent = (isError ? '❌ ERRO: ' : 'ℹ️ ') + msg;
+    debugBox.appendChild(line);
+  }
+  window._debugLogToScreen = logToScreen;
+  window.addEventListener('error', function(e){
+    logToScreen(e.message + ' (linha ' + e.lineno + ')', true);
+  });
+  window.addEventListener('unhandledrejection', function(e){
+    logToScreen('Promise rejeitada: ' + (e.reason && e.reason.message ? e.reason.message : JSON.stringify(e.reason)), true);
+  });
+  setTimeout(function(){
+    if(!window._appReady){
+      logToScreen('O site ainda não terminou de carregar 10 segundos depois.', true);
+      if(typeof firebase === 'undefined'){
+        logToScreen('CAUSA PROVÁVEL: a biblioteca Firebase não carregou (problema de ligação à internet ou bloqueio de rede).', true);
+      } else {
+        logToScreen('Firebase carregou. Provável causa: regras do Firestore estão a bloquear a leitura, ou domínio não autorizado.', true);
+      }
+    }
+  }, 10000);
+})();
+
 showLoader(); // mostra imediatamente ao carregar a página, até o Firebase responder
 function startListening(){
   if(unsubscribeSnapshot) unsubscribeSnapshot();
@@ -725,6 +758,7 @@ function startListening(){
       if(auth.currentUser) saveToStorage();
     }
     S._ready = true;
+    window._appReady = true;
     if(window._removeLoadingOv) { window._removeLoadingOv(); window._removeLoadingOv=null; }
     hideLoader();
     renderStore();
@@ -739,6 +773,7 @@ function startListening(){
     if(!S._urlParamsHandled){ S._urlParamsHandled = true; handleUrlParams(); }
   }, function(err){
     console.error('Erro a sincronizar com a base de dados.', err);
+    if(window._debugLogToScreen) window._debugLogToScreen('Firestore (loja/dados): ' + err.code + ' — ' + err.message, true);
     forceHideLoader();
     toast('⚠️ Sem ligação à base de dados','tr');
   });
